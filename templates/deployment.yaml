@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mautrix-hangouts.fullname" . }}
+  labels:
+{{ include "mautrix-hangouts.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mautrix-hangouts.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: {{ include "mautrix-hangouts.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+    {{- if .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml .Values.dnsConfig | nindent 8 }}
+    {{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ template "mautrix-hangouts.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: init
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args:
+            - "-c"
+            - |-
+              set -ex
+              cp /config/*.yaml /data/
+              {{- if .Values.uid }}
+              chown {{.Values.uid}}:{{.Values.gid}} -R /data
+              {{- end }}
+          env:
+            - { name: UID, value: {{ .Values.uid | toString | quote }} }
+            - { name: GID, value: {{ .Values.gid | toString | quote }} }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: logs
+              mountPath: /logs
+            - name: config
+              mountPath: /config
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ required "need config.appservice.port" .Values.config.appservice.port }}
+              protocol: TCP
+          env:
+            {{- if .Values.uid }}
+            - { name: UID, value: {{ .Values.uid | toString | quote }} }
+            - { name: GID, value: {{ .Values.gid | toString | quote }} }
+            {{- else }}
+            []
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /_matrix/mau/live
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /_matrix/mau/live
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.uid }}
+            - name: data
+              mountPath: /data
+            {{- else }}
+            - name: config
+              mountPath: /data
+            {{- end }}
+            - name: logs
+              mountPath: /logs
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "mautrix-hangouts.fullname" . }}
+        - name: data
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
