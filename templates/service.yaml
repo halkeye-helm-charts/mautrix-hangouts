@@ -14,7 +14,6 @@ spec:
       protocol: TCP
       name: http
   selector:
-    app.kubernetes.io/name: {{ include "mautrix-hangouts.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "mautrix-hangouts.selectorLabels" . | nindent 4 }}
 {{- end }}
 {{- end }}
