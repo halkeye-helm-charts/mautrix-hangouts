@@ -14,7 +14,7 @@ type: application
 appVersion: "latest"
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
-version: 0.1.4
+version: 0.1.5
 name: mautrix-hangouts
 description: A Matrix-Hangouts puppeting bridge
 keywords:
